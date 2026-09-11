@@ -112,8 +112,6 @@ public class Arena implements IArena {
     private static final HashMap<String, IArena> arenaByIdentifier = new HashMap<>();
     private static final LinkedList<IArena> arenas = new LinkedList<>();
     private static final Set<String> restoringArenas = ConcurrentHashMap.newKeySet();
-    private static final Set<String> warnedLobbyItemProblems = ConcurrentHashMap.newKeySet();
-    private static final Map<UUID, Integer> lobbyItemRecheckGenerations = new ConcurrentHashMap<>();
     private static int gamesBeforeRestart = config.getInt(ConfigPath.GENERAL_CONFIGURATION_BUNGEE_MODE_GAMES_BEFORE_RESTART);
     public static HashMap<UUID, Integer> afkCheck = new HashMap<>();
     public static HashMap<UUID, Integer> magicMilk = new HashMap<>();
@@ -563,7 +561,7 @@ public class Arena implements IArena {
             return false;
         }
 
-        p.getInventory().setArmorContents(null);
+        p.getInventory().setArmorContents(new ItemStack[4]);
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (getServerType() == ServerType.BUNGEE) {
                 BedWars.nms.sendPlayerSpawnPackets(p, this);
@@ -682,7 +680,7 @@ public class Arena implements IArena {
                 /* Spectator items */
                 sendSpectatorCommandItems(p);
 
-                p.getInventory().setArmorContents(null);
+                p.getInventory().setArmorContents(new ItemStack[4]);
                 if (playerBefore) {
                     requestArenaIndicatorRefresh();
                 } else {
@@ -1017,7 +1015,7 @@ public class Arena implements IArena {
         spectators.remove(p);
         removeArenaByPlayer(p, this);
         p.getInventory().clear();
-        p.getInventory().setArmorContents(null);
+        p.getInventory().setArmorContents(new ItemStack[4]);
         nms.setCollide(p, this, true);
 
         Arena.afkCheck.remove(p.getUniqueId());
@@ -1771,32 +1769,7 @@ public class Arena implements IArena {
      * not a periodic enforcement task.
      */
     public static void enterLobby(Player p) {
-        if (!Bukkit.isPrimaryThread()) {
-            Bukkit.getScheduler().runTask(plugin, () -> enterLobby(p));
-            return;
-        }
-        if (!isCurrentLobbyPlayer(p)) return;
-        p.setGameMode(GameMode.ADVENTURE);
-        PlayerMotion.disableFlight(p);
-        p.setCanPickupItems(true);
-        // A player leaving an arena may have just had his saved inventory
-        // restored. The BedWars lobby has its own loadout, so clear every
-        // player-inventory slot before rebuilding its command items.
-        p.getInventory().clear();
-        p.getInventory().setArmorContents(null);
-        p.setItemOnCursor(new ItemStack(Material.AIR));
-        refreshLobbyCommandItems(p);
-        scheduleLobbyItemRecheck(p);
-        LobbyAnnouncements.playerEntered(p);
-    }
-
-    private static void scheduleLobbyItemRecheck(Player player) {
-        UUID playerId = player.getUniqueId();
-        int generation = lobbyItemRecheckGenerations.merge(playerId, 1, Integer::sum);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!lobbyItemRecheckGenerations.remove(playerId, generation)) return;
-            refreshLobbyCommandItems(player);
-        }, 15L);
+        LobbyService.enter(p);
     }
 
     private void broadcastArenaJoin(Player joined) {
@@ -1827,128 +1800,12 @@ public class Arena implements IArena {
      * The compatibility API clears the inventory before applying the items.
      */
     public static void sendLobbyCommandItems(Player p) {
-        // Public compatibility API: callers have historically relied on the
-        // delayed full clear documented by BedWars.ArenaUtil. Internal lobby
-        // transitions use refreshLobbyCommandItems instead.
-        if (!config.getYml().isConfigurationSection(ConfigPath.GENERAL_CONFIGURATION_LOBBY_ITEMS_PATH)) return;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!isCurrentLobbyPlayer(p)) return;
-            p.getInventory().clear();
-            refreshLobbyCommandItems(p);
-        }, 15L);
+        LobbyService.sendCommandItems(p);
     }
 
     /** Internal immediate refresh used after the lobby transition is confirmed. */
     public static void refreshLobbyCommandItems(Player p) {
-        if (!Bukkit.isPrimaryThread()) {
-            Bukkit.getScheduler().runTask(plugin, () -> refreshLobbyCommandItems(p));
-            return;
-        }
-        if (!isCurrentLobbyPlayer(p)) return;
-
-        removeBedWarsCommandItems(p);
-        List<LobbyCommandItem> configuredItems = readLobbyCommandItems();
-        Map<String, LobbyCommandItem> byId = new LinkedHashMap<>();
-        configuredItems.forEach(item -> byId.put(item.id(), item));
-        LobbyItemLayout.Result layout = LobbyItemLayout.resolve(configuredItems.stream()
-                .map(item -> new LobbyItemLayout.Item(item.id(), item.slot(), item.returnPriority()))
-                .toList());
-        for (LobbyItemLayout.Conflict conflict : layout.conflicts()) {
-            LobbyCommandItem selected = byId.get(conflict.selectedId());
-            String resolution = selected != null && selected.returnPriority() > 0
-                    ? "为保证返回代理大厅物品可用"
-                    : "按配置中的既有后写顺序";
-            warnLobbyItemProblem("slot:" + conflict.slot() + ':' + conflict.replacedId() + ':' + conflict.selectedId(),
-                    "大厅物品槽位 " + (conflict.slot() + 1) + " 同时配置了 " + conflict.replacedId()
-                            + " 和 " + conflict.selectedId() + "；" + resolution + "，使用 "
-                            + conflict.selectedId() + "。请修改 config.yml 消除冲突。");
-        }
-
-        for (LobbyItemLayout.Item selected : layout.items()) {
-            LobbyCommandItem item = byId.get(selected.id());
-            if (item == null) continue;
-            try {
-                ItemStack stack = Misc.createItem(item.material(), item.data(), item.enchanted(),
-                        SupportPAPI.getSupportPAPI().replace(p,
-                                getMsg(p, Messages.GENERAL_CONFIGURATION_LOBBY_ITEMS_NAME
-                                        .replace("%path%", item.id()))),
-                        SupportPAPI.getSupportPAPI().replace(p,
-                                getList(p, Messages.GENERAL_CONFIGURATION_LOBBY_ITEMS_LORE
-                                        .replace("%path%", item.id()))),
-                        p, "RUNCOMMAND", item.command());
-                stack = CommandItemAction.tagReturnItem(stack, item.id(), item.command(),
-                        BedWars.mainCmd, CommandItemAction.Target.PROXY_LOBBY);
-                p.getInventory().setItem(item.slot(), stack);
-            } catch (RuntimeException exception) {
-                warnLobbyItemProblem("build:" + item.id(), "无法创建大厅物品 " + item.id()
-                        + "，已跳过该物品：" + exception.getMessage());
-            }
-        }
-    }
-
-    private static boolean isCurrentLobbyPlayer(Player player) {
-        String playerWorld = player.getWorld() == null ? null : player.getWorld().getName();
-        return LobbyInventoryPolicy.shouldApply(player.isOnline(), isInArena(player),
-                SetupSession.isInSetupSession(player.getUniqueId()), playerWorld,
-                BedWars.config.getLobbyWorldName());
-    }
-
-    private static void removeBedWarsCommandItems(Player player) {
-        for (int slot = 0; slot < player.getInventory().getSize(); slot++) {
-            ItemStack item = player.getInventory().getItem(slot);
-            if (CommandItemAction.isCommandItem(item)) {
-                player.getInventory().setItem(slot, null);
-            }
-        }
-    }
-
-    private static List<LobbyCommandItem> readLobbyCommandItems() {
-        if (!config.getYml().isConfigurationSection(ConfigPath.GENERAL_CONFIGURATION_LOBBY_ITEMS_PATH)) {
-            return List.of();
-        }
-
-        List<LobbyCommandItem> items = new ArrayList<>();
-        for (String id : Objects.requireNonNull(config.getYml().getConfigurationSection(
-                ConfigPath.GENERAL_CONFIGURATION_LOBBY_ITEMS_PATH)).getKeys(false)) {
-            String base = ConfigPath.GENERAL_CONFIGURATION_LOBBY_ITEMS_PATH + '.' + id;
-            List<String> required = List.of("material", "data", "slot", "enchanted", "command");
-            String missing = required.stream().filter(field -> !config.getYml().isSet(base + '.' + field))
-                    .findFirst().orElse(null);
-            if (missing != null) {
-                warnLobbyItemProblem("missing:" + id + ':' + missing,
-                        "大厅物品 " + id + " 缺少配置 " + base + '.' + missing + "，已跳过。");
-                continue;
-            }
-
-            Material material;
-            try {
-                material = Material.valueOf(config.getYml().getString(base + ".material", "")
-                        .trim().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException exception) {
-                warnLobbyItemProblem("material:" + id, "大厅物品 " + id + " 的材质无效，已跳过："
-                        + config.getYml().getString(base + ".material"));
-                continue;
-            }
-            int slot = config.getYml().getInt(base + ".slot");
-            if (slot < 0 || slot >= 41) {
-                warnLobbyItemProblem("slot-range:" + id, "大厅物品 " + id
-                        + " 的槽位必须在 0 到 40 之间，当前为 " + slot + "，已跳过。");
-                continue;
-            }
-            String command = config.getYml().getString(base + ".command", "");
-            items.add(new LobbyCommandItem(id, material, (byte) config.getYml().getInt(base + ".data"),
-                    config.getYml().getBoolean(base + ".enchanted"), slot, command,
-                    CommandItemAction.returnItemPriority(id, command, BedWars.mainCmd)));
-        }
-        return items;
-    }
-
-    private static void warnLobbyItemProblem(String key, String message) {
-        if (warnedLobbyItemProblems.add(key)) plugin.getLogger().warning(message);
-    }
-
-    private record LobbyCommandItem(String id, Material material, byte data, boolean enchanted,
-                                    int slot, String command, int returnPriority) {
+        LobbyService.refreshCommandItems(p);
     }
 
     /**
@@ -2105,27 +1962,28 @@ public class Arena implements IArena {
     public void checkWinner() {
         if (status != GameState.restarting) {
             int max = getTeams().size(), eliminated = 0;
+            ITeam remainingTeam = null;
             for (ITeam t : getTeams()) {
                 if (t.getMembers().isEmpty() && !ReJoin.hasPendingForTeam(t)) {
                     eliminated++;
                 } else {
-                    winner = t;
+                    remainingTeam = t;
                 }
             }
             if (max - eliminated == 1) {
-                if (winner == null || winner.getMembers().isEmpty()) {
+                if (remainingTeam == null || remainingTeam.getMembers().isEmpty()) {
                     return;
                 }
-                if (winner != null) {
-                    if (!winner.getMembers().isEmpty()) {
-                        for (Player p : winner.getMembers()) {
-                            if (!p.isOnline()) continue;
-                            p.getInventory().clear();
-                        }
+                ITeam winningTeam = remainingTeam;
+                winner = winningTeam;
+                if (!winningTeam.getMembers().isEmpty()) {
+                    for (Player p : winningTeam.getMembers()) {
+                        if (!p.isOnline()) continue;
+                        p.getInventory().clear();
                     }
                     StringBuilder winners = new StringBuilder();
                     //noinspection deprecation
-                    for (Player p : winner.getMembersCache()) {
+                    for (Player p : winningTeam.getMembersCache()) {
                         if (!winners.toString().contains(p.getDisplayName())) {
                             winners.append(p.getDisplayName()).append(" ");
                         }
@@ -2160,11 +2018,11 @@ public class Arena implements IArena {
                             String winnerTeamChat = playerLang.m(Messages.GAME_END_TEAM_WON_CHAT);
                             // check if message disabled
                             if (null != winnerTeamChat && !winnerTeamChat.isBlank()) {
-                                receiver.sendMessage(winnerTeamChat.replace("{TeamColor}", winner.getColor().chat().toString())
-                                        .replace("{TeamName}", winner.getDisplayName(playerLang)));
+                                receiver.sendMessage(winnerTeamChat.replace("{TeamColor}", winningTeam.getColor().chat().toString())
+                                        .replace("{TeamName}", winningTeam.getDisplayName(playerLang)));
                             }
 
-                            if (winner.getMembers().contains(receiver) || winner.wasMember(receiver.getUniqueId())) {
+                            if (winningTeam.getMembers().contains(receiver) || winningTeam.wasMember(receiver.getUniqueId())) {
                                 nms.sendTitle(receiver, getMsg(receiver, Messages.GAME_END_VICTORY_PLAYER_TITLE), null, 0, 70, 20);
                             } else {
                                 nms.sendTitle(receiver, playerLang.m(Messages.GAME_END_GAME_OVER_PLAYER_TITLE), null, 0, 70, 20);
@@ -2186,14 +2044,13 @@ public class Arena implements IArena {
                                 }
 
                                 msg = msg.replace("{winnerFormat}", getMaxInTeam() > 1 ? playerLang.m(Messages.FORMATTING_TEAM_WINNER_FORMAT).replace("{members}", winners.toString()) : playerLang.m(Messages.FORMATTING_SOLO_WINNER_FORMAT).replace("{members}", winners.toString()))
-                                        .replace("{TeamColor}", winner.getColor().chat().toString()).replace("{TeamName}", winner.getDisplayName(playerLang));
+                                        .replace("{TeamColor}", winningTeam.getColor().chat().toString()).replace("{TeamName}", winningTeam.getDisplayName(playerLang));
 
                                 receiver.sendMessage(SupportPAPI.getSupportPAPI().replace(receiver, msg));
                             }
 
                         }
                     }
-
                 }
                 changeStatus(GameState.restarting);
 
@@ -2369,9 +2226,8 @@ public class Arena implements IArena {
                         Location l;
                         try {
                             l = new Location(Bukkit.getWorld(data[6]), Double.parseDouble(data[1]), Double.parseDouble(data[2]), Double.parseDouble(data[3]));
-                        } catch (Exception e) {
-                            //noinspection ImplicitArrayToString
-                            plugin.getLogger().severe("Could not load sign at: " + data.toString());
+                        } catch (IllegalArgumentException | IndexOutOfBoundsException e) {
+                            plugin.getLogger().severe("Could not load sign at: " + Arrays.toString(data));
                             continue;
                         }
                         if (l.getWorld() != null) {
@@ -2834,11 +2690,12 @@ public class Arena implements IArena {
 
     @Override
     public boolean equals(Object obj) {
-        if (obj == null) return false;
-        if (obj instanceof IArena) {
-            return ((IArena) obj).getWorldName().equals(this.getWorldName());
-        }
-        return false;
+        return ArenaIdentity.equals(worldName, obj);
+    }
+
+    @Override
+    public int hashCode() {
+        return ArenaIdentity.hashCode(worldName);
     }
 
     private void destroyReJoins() {
@@ -2952,7 +2809,7 @@ public class Arena implements IArena {
         teleport.whenComplete((success, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ArenaTransitionPolicy.shouldApplyLobbyStateAfterTeleport(
                     error == null && Boolean.TRUE.equals(success),
-                    player.isOnline(), isCurrentLobbyPlayer(player))) {
+                    player.isOnline(), LobbyService.isCurrentLobbyPlayer(player))) {
                 enterLobby(player);
             }
         }));

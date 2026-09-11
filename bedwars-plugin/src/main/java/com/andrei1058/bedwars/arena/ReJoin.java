@@ -270,9 +270,11 @@ public class ReJoin {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null) return false;
-        if (!(o instanceof ReJoin)) return false;
-        ReJoin reJoin = (ReJoin) o;
-        return reJoin.getPl().equals(getPl());
+        return o instanceof ReJoin reJoin && java.util.Objects.equals(reJoin.getPl(), getPl());
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hashCode(player);
     }
 }

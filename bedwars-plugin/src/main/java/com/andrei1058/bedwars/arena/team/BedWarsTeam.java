@@ -226,7 +226,7 @@ public class BedWarsTeam implements ITeam {
     public void sendDefaultInventory(Player p, boolean clean) {
         if (clean) {
             p.getInventory().clear();
-            p.getInventory().setArmorContents(null);
+            p.getInventory().setArmorContents(new ItemStack[4]);
         }
         String path = config.getYml().get(ConfigPath.GENERAL_CONFIGURATION_DEFAULT_ITEMS + "." + arena.getGroup()) == null ?
                 ConfigPath.GENERAL_CONFIGURATION_DEFAULT_ITEMS + ".Default" : ConfigPath.GENERAL_CONFIGURATION_DEFAULT_ITEMS + "." + arena.getGroup();

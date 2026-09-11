@@ -32,6 +32,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.ItemStack;
 
 import static com.andrei1058.bedwars.BedWars.*;
 
@@ -41,7 +42,7 @@ public class JoinListenerMultiArena implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         e.setJoinMessage(null);
         final Player p = e.getPlayer();
-        p.getInventory().setArmorContents(null);
+        p.getInventory().setArmorContents(new ItemStack[4]);
 
         JoinHandlerCommon.displayCustomerDetails(p);
 
@@ -102,4 +103,3 @@ public class JoinListenerMultiArena implements Listener {
         p.setFoodLevel(20);
     }
 }
-

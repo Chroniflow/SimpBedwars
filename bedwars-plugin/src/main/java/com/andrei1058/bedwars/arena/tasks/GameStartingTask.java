@@ -38,6 +38,7 @@ import com.andrei1058.bedwars.configuration.Sounds;
 import com.andrei1058.bedwars.support.papi.SupportPAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
@@ -116,7 +117,7 @@ public class GameStartingTask implements Runnable, StartingTask {
             // keeps the lobby copy separately for restoration on arena exit.
             getArena().getPlayers().forEach(player -> {
                 player.getInventory().clear();
-                player.getInventory().setArmorContents(null);
+                player.getInventory().setArmorContents(new ItemStack[4]);
                 player.getEnderChest().clear();
             });
 
