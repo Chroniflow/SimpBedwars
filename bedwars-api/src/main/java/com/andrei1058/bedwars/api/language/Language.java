@@ -601,24 +601,23 @@ public class Language extends ConfigManager {
     public static void migrateBuiltInTabPlayerRows(@NotNull YamlConfiguration yml) {
         migrateLegacyTowerShopItem(yml);
         List<String> visibleTeamPrefix = List.of("{teamColor}{teamName} ");
-        replaceKnownList(yml, Messages.FORMATTING_SB_TAB_PLAYING_PREFIX, visibleTeamPrefix, List.of(
-                List.of(""),
-                visibleTeamPrefix,
-                List.of("{teamColor}[{teamLetter}] ")
-        ));
+        List<String> bracketedTeamPrefix = List.of("&7[{teamColor}{teamName}&7] ");
+        replaceKnownList(yml, Messages.FORMATTING_SB_TAB_PLAYING_PREFIX, bracketedTeamPrefix,
+                List.of(List.of(""), visibleTeamPrefix, List.of("{teamColor}[{teamLetter}] ")));
         for (String path : List.of(
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN1_PREFIX,
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN2_PREFIX)) {
-            replaceKnownList(yml, path, visibleTeamPrefix, List.of(
+            replaceKnownList(yml, path, bracketedTeamPrefix, List.of(
                     List.of(""),
+                    visibleTeamPrefix,
                     List.of("&6&l⭐ {teamColor}{teamName} "),
                     List.of("&6★ {teamColor}[{teamLetter}] "),
                     List.of("{teamColor}[{teamLetter}] ")
             ));
         }
-        replaceKnownList(yml, Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX, visibleTeamPrefix, List.of(
+        replaceKnownList(yml, Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX, bracketedTeamPrefix, List.of(
                 List.of(""),
-                List.of("{teamColor}{teamName} "),
+                visibleTeamPrefix,
                 List.of("{teamColor}[{teamLetter}] ")
         ));
         replaceKnownList(yml, Messages.FORMATTING_SB_TAB_PLAYING_ELM_SUFFIX,

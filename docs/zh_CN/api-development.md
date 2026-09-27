@@ -8,7 +8,7 @@ Maven：
 <dependency>
     <groupId>com.simpmc.bedwars</groupId>
     <artifactId>simpmc-bedwars-api</artifactId>
-    <version>5.8.0</version>
+    <version>5.9.0</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -165,7 +165,9 @@ sidebars.giveSidebar(player, arenaSnapshot, false);
 
 `giveSidebar` 的竞技场参数是调用时快照；实现会在应用前与实时玩家竞技场注册表核对，避免延迟任务把新竞技场面板覆盖成大厅面板。附属插件不应在竞技场内持续调用 `Player#setScoreboard` 与 BedWars 争抢同一面板；若只需扩展内容，应监听 `PlayerSidebarInitEvent` 操作公开的 `ISidebar`。SimpMC-BedWars 离开上下文时会恢复接管前最后观察到的外部 scoreboard。
 
-TAB 队伍色由每个查看者的 scoreboard Team 同时控制 TAB 和头顶名牌；竞技场玩家行不再附加队伍名称或字母。插件只向对应查看者发送 nullable PlayerInfo 名称，不修改目标玩家的全局 `playerListName`，因此附属插件不应再把非空 PlayerInfo 名称强制发送给竞技场查看者，否则客户端会绕过 Team 颜色。
+TAB 按查看者发送完整 PlayerInfo 显示名，不修改目标玩家的全局 `playerListName`；scoreboard Team 维护头顶名牌、碰撞与队伍元数据。内置队伍行显示为 `[{队伍名字}] {玩家名字}`，方括号为灰色，其余沿用队伍颜色。附属插件应避免向同一竞技场查看者持续覆盖显示名、列表顺序或显示状态。
+
+5.9.0 起，最终淘汰和开局后加入的旁观者统一排在参赛玩家之后。活动玩家看不到同场旁观者行，旁观者仍能查看完整名单。`Sidebar#synchronizeHiddenPlayerList(viewer, targets)` 通过 `UPDATE_LISTED` 维护单个查看者的隐藏集合，不删除玩家档案、不修改真实游戏模式；清空集合或释放 Sidebar 时恢复服务器当前可见且允许列出的玩家。Paper 重建条目后可调用 `replayHiddenPlayerList(viewer, target)` 重放该目标的隐藏状态，离场时调用 `removeHiddenPlayerListTarget(viewer, uuid)` 清理对应状态。
 
 7.1.0 新增 `PlayerTab.PlayerListMode`。`ACTUAL` 保留目标当前真实模式；`SPECTATOR` 只向其他查看者发送 `UPDATE_GAME_MODE=SPECTATOR`，不会调用 `Player#setGameMode`，适合需要保留 ADVENTURE 交互的自定义旁观行。7.1.1 起，当目标就是 Sidebar 持有者本人时始终保留 Paper 当前真实模式；旧版本缓存过的本人伪模式会立即恢复，避免客户端移动模式与服务器分叉。旧构造器和旧 `Sidebar#playerTabCreate` 重载默认使用 `ACTUAL`；可通过带 `PlayerListMode` 的新重载创建，或对已有行调用 `setPlayerListMode`。Sidebar 释放、被覆盖或删除该行时会从 Paper 当前状态恢复真实模式和第三方 nullable 名称。
 

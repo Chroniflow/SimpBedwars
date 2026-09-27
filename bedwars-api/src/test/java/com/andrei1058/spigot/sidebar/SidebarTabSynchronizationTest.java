@@ -29,6 +29,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SidebarTabSynchronizationTest {
 
     @Test
+    void synchronizesHiddenPlayerInfoRowsPerViewer() {
+        RecordingRenderer renderer = new RecordingRenderer();
+        Sidebar sidebar = sidebar(renderer);
+        Player viewer = player("Viewer");
+        Player spectator = player("Spectator");
+
+        sidebar.synchronizeHiddenPlayerList(viewer, List.of(spectator));
+        sidebar.synchronizeHiddenPlayerList(viewer, List.of(viewer, spectator));
+        assertEquals(List.of(spectator), renderer.hidden.stream()
+                .map(CapturedTarget::target).toList());
+
+        sidebar.synchronizeHiddenPlayerList(viewer, List.of());
+        assertEquals(List.of(spectator), renderer.shown.stream()
+                .map(CapturedTarget::target).toList());
+    }
+
+    @Test
+    void hiddenRowsFollowOwnershipAndAreReleasedOnLeave() {
+        SidebarManager manager = SidebarManager.getInstance();
+        RecordingRenderer renderer = new RecordingRenderer();
+        Sidebar previous = sidebar(renderer);
+        Sidebar current = sidebar(new RecordingRenderer());
+        Player viewer = player("HiddenOwnershipViewer");
+        Player spectator = player("HiddenSpectator");
+        manager.claimDisplayNameOwnership(previous, viewer);
+        try {
+            previous.synchronizeHiddenPlayerList(viewer, List.of(spectator));
+            manager.claimDisplayNameOwnership(current, viewer);
+            assertEquals(1, renderer.shown.size());
+            previous.synchronizeHiddenPlayerList(viewer, List.of(spectator));
+            assertEquals(1, renderer.hidden.size(), "suspended sidebar must not change visibility");
+            manager.releaseDisplayNameOwnership(current, viewer);
+            assertEquals(2, renderer.hidden.size(), "resumed sidebar must restore hidden state");
+            previous.replayHiddenPlayerList(viewer, spectator);
+            assertEquals(3, renderer.hidden.size(), "showPlayer must reapply hiding");
+            previous.removeHiddenPlayerListTarget(viewer, spectator.getUniqueId());
+            assertEquals(2, renderer.shown.size());
+            previous.replayHiddenPlayerList(viewer, spectator);
+            assertEquals(3, renderer.hidden.size(), "departed target must be forgotten");
+        } finally {
+            manager.releaseDisplayNameOwnership(current, viewer);
+            manager.releaseDisplayNameOwnership(previous, viewer);
+        }
+    }
+
+    @Test
     void allocatesStableCollisionFreeTeamNames() {
         Sidebar sidebar = sidebar();
 
@@ -1031,6 +1077,8 @@ class SidebarTabSynchronizationTest {
         private final java.util.ArrayList<CapturedTarget> spectatorModes = new java.util.ArrayList<>();
         private final java.util.ArrayList<CapturedTarget> restoredGameModes = new java.util.ArrayList<>();
         private final java.util.ArrayList<CapturedTarget> restored = new java.util.ArrayList<>();
+        private final java.util.ArrayList<CapturedTarget> hidden = new java.util.ArrayList<>();
+        private final java.util.ArrayList<CapturedTarget> shown = new java.util.ArrayList<>();
         private boolean renderResult = true;
         private boolean spectatorModeResult = true;
         private boolean restoreGameModeResult = true;
@@ -1068,6 +1116,18 @@ class SidebarTabSynchronizationTest {
             restoreCalls++;
             targets.forEach(target -> restored.add(new CapturedTarget(viewer, target)));
             return restoreResult;
+        }
+
+        @Override
+        public boolean hidePlayerList(Player viewer, java.util.Collection<Player> targets) {
+            targets.forEach(target -> hidden.add(new CapturedTarget(viewer, target)));
+            return true;
+        }
+
+        @Override
+        public boolean showPlayerList(Player viewer, java.util.Collection<Player> targets) {
+            targets.forEach(target -> shown.add(new CapturedTarget(viewer, target)));
+            return true;
         }
     }
 

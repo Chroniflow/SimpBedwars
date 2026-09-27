@@ -13,6 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SimplifiedChineseMigrationTest {
 
+    private static final List<String> BRACKETED_TEAM_PREFIX = List.of("&7[{teamColor}{teamName}&7] ");
+
     @Test
     void schemaSixteenKeepsGameTimeAndCustomMessages() {
         YamlConfiguration language = new YamlConfiguration();
@@ -46,19 +48,19 @@ class SimplifiedChineseMigrationTest {
     }
 
     @Test
-    void schemaTwentyPersistsTheMissingGameIdDefault() {
+    void schemaTwentyOnePersistsTheMissingGameIdDefault() {
         YamlConfiguration defaults = new YamlConfiguration();
         defaults.set(Messages.FORMATTING_SB_TAB_GAME_ID, "&7对局编号：&f{gameId}");
         YamlConfiguration language = new YamlConfiguration();
         language.setDefaults(defaults);
-        language.set(ConfigManager.CONFIG_VERSION_PATH, 19);
+        language.set(ConfigManager.CONFIG_VERSION_PATH, 20);
 
-        assertTrue(ConfigManager.applyVersionedMigration(language, 20,
+        assertTrue(ConfigManager.applyVersionedMigration(language, 21,
                 SimplifiedChinese::migrateSchema16));
 
         assertEquals("&7对局编号：&f{gameId}",
                 language.getString(Messages.FORMATTING_SB_TAB_GAME_ID));
-        assertEquals(20, language.getInt(ConfigManager.CONFIG_VERSION_PATH));
+        assertEquals(21, language.getInt(ConfigManager.CONFIG_VERSION_PATH));
     }
 
     @Test
@@ -172,9 +174,9 @@ class SimplifiedChineseMigrationTest {
                 language.getString(Messages.COMMAND_JOIN_PLAYER_JOIN_MSG));
         assertEquals("&f你属于 {teamColor}{teamName}队",
                 language.getStringList(Messages.FORMATTING_SB_TAB_PLAYING_FOOTER).get(1));
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_PLAYING_PREFIX));
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_RESTARTING_WIN1_PREFIX));
     }
 
@@ -210,13 +212,13 @@ class SimplifiedChineseMigrationTest {
 
         Language.migrateBuiltInTabPlayerRows(language);
 
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_PLAYING_PREFIX));
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX));
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_RESTARTING_WIN1_PREFIX));
-        assertEquals(List.of("{teamColor}{teamName} "),
+        assertEquals(BRACKETED_TEAM_PREFIX,
                 language.getStringList(Messages.FORMATTING_SB_TAB_RESTARTING_WIN2_PREFIX));
     }
 

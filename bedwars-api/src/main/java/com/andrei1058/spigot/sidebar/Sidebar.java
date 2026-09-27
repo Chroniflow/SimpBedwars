@@ -54,6 +54,8 @@ public class Sidebar {
     private final Map<UUID, Map<UUID, String>> renderedPlayerListNames = new HashMap<>();
     private final Map<UUID, Set<UUID>> spectatorPlayerListModes = new HashMap<>();
     private final Map<UUID, Map<UUID, Player>> pendingPlayerListRestores = new HashMap<>();
+    private final Map<UUID, Map<UUID, Player>> desiredHiddenPlayerLists = new HashMap<>();
+    private final Map<UUID, Map<UUID, Player>> appliedHiddenPlayerLists = new HashMap<>();
     private final Map<UUID, Scoreboard> previousScoreboards = new HashMap<>();
     private final Map<String, PlayerTab> tabs = new HashMap<>();
     private final Map<String, String> tabTeamNames = new HashMap<>();
@@ -122,6 +124,7 @@ public class Sidebar {
         sidebarManager.claimDisplayNameOwnership(this, player);
         retryPendingPlayerListRestores(player);
         renderPlayerListNames(player, renderedTabs, true);
+        applyHiddenPlayerListState(player);
     }
 
     public void remove(@NotNull Player player) {
@@ -132,6 +135,7 @@ public class Sidebar {
         SidebarManager sidebarManager = SidebarManager.getInstance();
         if (scoreboard == null) {
             sidebarManager.releaseDisplayNameOwnership(this, player);
+            restoreHiddenPlayerList(player);
             discardViewerDisplayNameState(playerId);
             return;
         }
@@ -142,6 +146,7 @@ public class Sidebar {
             retryPendingPlayerListRestores(viewer);
             restorePlayerListNames(viewer, tabs.values());
         }
+        if (viewer != null) restoreHiddenPlayerList(viewer);
         if (player.getScoreboard() == scoreboard) {
             ScoreboardManager manager = Bukkit.getScoreboardManager();
             player.setScoreboard(previous == null && manager != null ? manager.getMainScoreboard() : previous);
@@ -289,6 +294,7 @@ public class Sidebar {
                 .filter(Player::isOnline)
                 .filter(viewer -> SidebarManager.getInstance().ownsDisplayNames(this, viewer))
                 .forEach(viewer -> restorePlayerListNames(viewer, tabs.values()));
+        viewers.values().stream().filter(Player::isOnline).forEach(this::restoreHiddenPlayerList);
         tabs.values().forEach(tab -> {
             detachTab(tab);
         });
@@ -298,6 +304,85 @@ public class Sidebar {
         collisionTeamNames.clear();
         nextTabTeamId = 0;
         nextCollisionTeamId = 0;
+    }
+
+    /**
+     * Synchronize the client-side PlayerInfo visibility for one viewer. The
+     * desired set is retained across scoreboard reattachment and reapplied
+     * when this Sidebar resumes control of the viewer's list.
+     */
+    public void synchronizeHiddenPlayerList(@NotNull Player viewer,
+                                            @NotNull Collection<Player> hiddenTargets) {
+        UUID viewerId = viewer.getUniqueId();
+        Map<UUID, Player> desired = new LinkedHashMap<>();
+        hiddenTargets.stream()
+                .filter(Player::isOnline)
+                .filter(target -> !target.getUniqueId().equals(viewerId))
+                .forEach(target -> desired.putIfAbsent(target.getUniqueId(), target));
+        desiredHiddenPlayerLists.put(viewerId, desired);
+        SidebarManager manager = SidebarManager.getInstance();
+        if (!viewer.isOnline() || (manager.hasDisplayNameOwnership(this, viewer)
+                && !manager.ownsDisplayNames(this, viewer))) return;
+
+        Map<UUID, Player> applied = appliedHiddenPlayerLists.computeIfAbsent(
+                viewerId, ignored -> new LinkedHashMap<>());
+        List<Player> toHide = desired.entrySet().stream()
+                .filter(entry -> !applied.containsKey(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
+        List<Player> toShow = applied.entrySet().stream()
+                .filter(entry -> !desired.containsKey(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
+        if (!toHide.isEmpty() && displayNameRenderer.hidePlayerList(viewer, toHide)) {
+            toHide.forEach(target -> applied.put(target.getUniqueId(), target));
+        }
+        if (!toShow.isEmpty() && displayNameRenderer.showPlayerList(viewer, toShow)) {
+            toShow.forEach(target -> applied.remove(target.getUniqueId()));
+        }
+    }
+
+    private void applyHiddenPlayerListState(@NotNull Player viewer) {
+        Map<UUID, Player> desired = desiredHiddenPlayerLists.get(viewer.getUniqueId());
+        if (desired == null || desired.isEmpty()) return;
+        Map<UUID, Player> applied = appliedHiddenPlayerLists.computeIfAbsent(
+                viewer.getUniqueId(), ignored -> new LinkedHashMap<>());
+        applied.clear();
+        if (displayNameRenderer.hidePlayerList(viewer, desired.values())) {
+            applied.putAll(desired);
+        }
+    }
+
+    private void restoreHiddenPlayerList(@NotNull Player viewer) {
+        desiredHiddenPlayerLists.remove(viewer.getUniqueId());
+        releaseHiddenPlayerList(viewer);
+    }
+
+    private void releaseHiddenPlayerList(@NotNull Player viewer) {
+        Map<UUID, Player> applied = appliedHiddenPlayerLists.remove(viewer.getUniqueId());
+        if (applied != null && !applied.isEmpty() && viewer.isOnline()) {
+            displayNameRenderer.showPlayerList(viewer, applied.values());
+        }
+    }
+
+    /** Reapply one hidden row after Paper has rebuilt the target's PlayerInfo. */
+    public void replayHiddenPlayerList(@NotNull Player viewer, @NotNull Player target) {
+        Map<UUID, Player> desired = desiredHiddenPlayerLists.get(viewer.getUniqueId());
+        if (desired == null || !desired.containsKey(target.getUniqueId())
+                || !SidebarManager.getInstance().ownsDisplayNames(this, viewer)) return;
+        if (displayNameRenderer.hidePlayerList(viewer, List.of(target))) {
+            appliedHiddenPlayerLists.computeIfAbsent(viewer.getUniqueId(), ignored -> new LinkedHashMap<>())
+                    .put(target.getUniqueId(), target);
+        }
+    }
+
+    /** Release one departing target without retaining its old Player instance. */
+    public void removeHiddenPlayerListTarget(@NotNull Player viewer, @NotNull UUID targetId) {
+        Map<UUID, Player> desired = desiredHiddenPlayerLists.get(viewer.getUniqueId());
+        if (desired != null) desired.remove(targetId);
+        Map<UUID, Player> applied = appliedHiddenPlayerLists.get(viewer.getUniqueId());
+        Player target = applied == null ? null : applied.remove(targetId);
+        if (target != null && viewer.isOnline()) displayNameRenderer.showPlayerList(viewer, List.of(target));
     }
 
     public void hidePlayersHealth() {
@@ -718,6 +803,7 @@ public class Sidebar {
         }
         retryPendingPlayerListRestores(viewer);
         restorePlayerListNames(viewer, tabs.values());
+        releaseHiddenPlayerList(viewer);
     }
 
     void resumeDisplayNameOwnership(@NotNull Player viewer) {
@@ -730,6 +816,7 @@ public class Sidebar {
         }
         retryPendingPlayerListRestores(viewer);
         renderPlayerListNames(viewer, renderPlayerTabs(tabs.values()), true);
+        applyHiddenPlayerListState(viewer);
     }
 
     private void renderPlayerListNames(@NotNull Player viewer, @NotNull Collection<RenderedPlayerTab> playerTabs,
@@ -921,6 +1008,8 @@ public class Sidebar {
         renderedPlayerListNames.remove(viewerId);
         spectatorPlayerListModes.remove(viewerId);
         pendingPlayerListRestores.remove(viewerId);
+        desiredHiddenPlayerLists.remove(viewerId);
+        appliedHiddenPlayerLists.remove(viewerId);
     }
 
     private void restoreOrRenderRemainingTab(@NotNull PlayerTab removedTab) {

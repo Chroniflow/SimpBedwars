@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LanguageTabPlayerRowsMigrationTest {
 
+    private static final List<String> BRACKETED_TEAM_PREFIX = List.of("&7[{teamColor}{teamName}&7] ");
+
     @Test
     void schemaEightEmptyBuiltInPrefixesGainVisibleTeamNames() {
         YamlConfiguration language = new YamlConfiguration();
@@ -32,7 +34,7 @@ class LanguageTabPlayerRowsMigrationTest {
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN1_PREFIX,
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN2_PREFIX,
                 Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX)) {
-            assertEquals(List.of("{teamColor}{teamName} "), language.getStringList(path), path);
+            assertEquals(BRACKETED_TEAM_PREFIX, language.getStringList(path), path);
         }
     }
 
@@ -61,7 +63,7 @@ class LanguageTabPlayerRowsMigrationTest {
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN1_PREFIX,
                 Messages.FORMATTING_SB_TAB_RESTARTING_WIN2_PREFIX,
                 Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX)) {
-            assertEquals(List.of("{teamColor}{teamName} "), language.getStringList(path), path);
+            assertEquals(BRACKETED_TEAM_PREFIX, language.getStringList(path), path);
         }
         assertEquals(List.of(" &c&oEliminated", " {teamColor}&oEliminated {vPrefix}",
                         "{teamColor}&oEliminated {level}"),

@@ -28,6 +28,53 @@ public final class PlayerListDisplayNamePacketsRuntimeProbe {
         }
         verifyColorOnWire(ChatColor.RED, false, "\u00a7cAlice");
         verifyColorOnWire(ChatColor.BLUE, true, "\u00a79\u00a7oAlice");
+        verifyListingOnWire(false);
+        verifyListingOnWire(true);
+    }
+
+    private static void verifyListingOnWire(boolean listed) {
+        try {
+            UUID playerId = UUID.randomUUID();
+            Player target = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(),
+                    new Class<?>[]{Player.class}, (proxy, method, arguments) -> {
+                        if (method.getName().equals("getUniqueId")) return playerId;
+                        throw new UnsupportedOperationException(method.getName());
+                    });
+            var constructor = PlayerListDisplayNamePackets.class.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            Object bridge = constructor.newInstance();
+            Method create = PlayerListDisplayNamePackets.class.getDeclaredMethod(
+                    "createListedPacket", Collection.class, boolean.class);
+            create.setAccessible(true);
+            Object decoded = roundTrip(create.invoke(bridge, List.of(target), listed));
+            Object entry = ((List<?>) decoded.getClass().getMethod("entries").invoke(decoded)).getFirst();
+            Collection<?> actions = (Collection<?>) decoded.getClass().getMethod("actions").invoke(decoded);
+            if (!playerId.equals(entry.getClass().getMethod("profileId").invoke(entry))
+                    || !Boolean.valueOf(listed).equals(entry.getClass().getMethod("listed").invoke(entry))
+                    || actions.size() != 1 || !actions.iterator().next().toString().equals("UPDATE_LISTED")) {
+                throw new IllegalStateException("Paper PlayerInfo codec lost TAB visibility");
+            }
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Unable to verify TAB visibility on the Paper wire codec", exception);
+        }
+    }
+
+    private static Object roundTrip(Object packet) throws ReflectiveOperationException {
+        Class<?> byteBuf = Class.forName("io.netty.buffer.ByteBuf");
+        Object rawBuffer = Class.forName("io.netty.buffer.Unpooled").getMethod("buffer").invoke(null);
+        try {
+            Class<?> registryAccess = Class.forName("net.minecraft.core.RegistryAccess");
+            Object buffer = Class.forName("net.minecraft.network.RegistryFriendlyByteBuf")
+                    .getConstructor(byteBuf, registryAccess)
+                    .newInstance(rawBuffer, registryAccess.getField("EMPTY").get(null));
+            Object codec = packet.getClass().getField("STREAM_CODEC").get(null);
+            Class.forName("net.minecraft.network.codec.StreamEncoder")
+                    .getMethod("encode", Object.class, Object.class).invoke(codec, buffer, packet);
+            return Class.forName("net.minecraft.network.codec.StreamDecoder")
+                    .getMethod("decode", Object.class).invoke(codec, buffer);
+        } finally {
+            byteBuf.getMethod("release").invoke(rawBuffer);
+        }
     }
 
     private static void verifyColorOnWire(ChatColor color, boolean italic, String expectedName) {

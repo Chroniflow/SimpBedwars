@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +59,8 @@ class PlayerListLifecycleTest {
         Sidebar handle = mock(Sidebar.class);
         when(viewer.getArena()).thenReturn(arena);
         when(viewer.getHandle()).thenReturn(handle);
+        Player activeViewer = player("ActiveViewer");
+        when(viewer.getPlayer()).thenReturn(activeViewer);
         BwTabList tabList = new BwTabList(viewer);
         PlayerTab row = new PlayerTab("alice", player);
         deploy(tabList, row);
@@ -65,6 +68,54 @@ class PlayerListLifecycleTest {
         tabList.refreshPlayerListState();
 
         verify(handle).removeTab("alice");
+        verify(handle).synchronizeHiddenPlayerList(activeViewer, List.of(player));
+    }
+
+    @Test
+    void spectatorViewerKeepsEliminatedRowsAndRestoresFullList() throws ReflectiveOperationException {
+        Player eliminated = player("Eliminated");
+        IArena arena = arena(eliminated, new AtomicReference<>(team("red", TeamColor.RED)),
+                new AtomicBoolean(false), true);
+        BwSidebar viewer = mock(BwSidebar.class);
+        Sidebar handle = mock(Sidebar.class);
+        when(viewer.getArena()).thenReturn(arena);
+        when(viewer.getHandle()).thenReturn(handle);
+        when(viewer.getPlayer()).thenReturn(eliminated);
+        BwTabList tabList = new BwTabList(viewer);
+        deploy(tabList, new PlayerTab("eliminated", eliminated));
+
+        tabList.refreshPlayerListState();
+
+        verify(handle, never()).removeTab("eliminated");
+        verify(handle).synchronizeHiddenPlayerList(eliminated, List.of());
+    }
+
+    @Test
+    void showEventReappliesHiddenStateEvenWithoutAFormattedRow() {
+        BwSidebar sidebar = mock(BwSidebar.class);
+        Sidebar handle = mock(Sidebar.class);
+        Player viewer = player("ActiveViewer");
+        Player spectator = player("Spectator");
+        when(sidebar.getHandle()).thenReturn(handle);
+        when(sidebar.getPlayer()).thenReturn(viewer);
+
+        new BwTabList(sidebar).replayPlayerListEntry(spectator);
+
+        verify(handle).replayHiddenPlayerList(viewer, spectator);
+    }
+
+    @Test
+    void leavingRemovesHiddenStateEvenWithoutAFormattedRow() {
+        BwSidebar sidebar = mock(BwSidebar.class);
+        Sidebar handle = mock(Sidebar.class);
+        Player viewer = player("ActiveViewer");
+        UUID targetId = UUID.randomUUID();
+        when(sidebar.getHandle()).thenReturn(handle);
+        when(sidebar.getPlayer()).thenReturn(viewer);
+
+        new BwTabList(sidebar).removePlayerListEntry(targetId);
+
+        verify(handle).removeHiddenPlayerListTarget(viewer, targetId);
     }
 
     private static IArena arena(Player player, AtomicReference<ITeam> currentTeam,
@@ -75,7 +126,8 @@ class PlayerListLifecycleTest {
                     case "getTeam" -> currentTeam.get();
                     case "getExTeam" -> null;
                     case "isReSpawning" -> respawning.get();
-                    case "isSpectator" -> spectator;
+                    case "isSpectator" -> spectator && args[0] != null
+                            && player.getUniqueId().equals(((Player) args[0]).getUniqueId());
                     case "getPlayers" -> List.of(player);
                     case "getSpectators" -> spectator ? List.of(player) : List.of();
                     default -> throw new UnsupportedOperationException(method.getName());

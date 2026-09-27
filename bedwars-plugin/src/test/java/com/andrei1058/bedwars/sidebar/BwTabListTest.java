@@ -150,7 +150,7 @@ class BwTabListTest {
         );
 
         assertEquals(
-                List.of("Alice", "Bob", "Adam", "charlie"),
+                List.of("Alice", "Bob", "Adam", "charlie", "Aaron", "Viewer"),
                 BwTabList.orderedArenaPlayers(arena).stream().map(Player::getName).toList()
         );
     }
@@ -181,6 +181,28 @@ class BwTabListTest {
                 List.of("RED", "YELLOW", "GREEN", "DARK_GREEN", "CYAN",
                         "BLUE", "PINK", "WHITE", "GRAY", "DARK_GRAY"),
                 BwTabList.orderedArenaPlayers(arena).stream().map(Player::getName).toList()
+        );
+    }
+
+    @Test
+    void globalPlayerListPlacesSpectatorsAfterActivePlayersAcrossArenas() {
+        ITeam red = team("red-global", TeamColor.RED);
+        ITeam blue = team("blue-global", TeamColor.BLUE);
+        Player activeA = player("ActiveA");
+        Player activeB = player("ActiveB");
+        Player spectatorA = player("SpectatorA");
+        Player spectatorB = player("SpectatorB");
+        IArena first = arena("a", List.of(red), List.of(activeA), List.of(spectatorA),
+                Map.of(activeA.getUniqueId(), red), Map.of(spectatorA.getUniqueId(), red),
+                GameState.playing);
+        IArena second = arena("b", List.of(blue), List.of(activeB), List.of(spectatorB),
+                Map.of(activeB.getUniqueId(), blue), Map.of(spectatorB.getUniqueId(), blue),
+                GameState.playing);
+
+        assertEquals(
+                List.of("ActiveA", "ActiveB", "SpectatorA", "SpectatorB"),
+                BwTabList.orderedActiveArenaPlayers(List.of(second, first)).stream()
+                        .map(Player::getName).toList()
         );
     }
 
@@ -327,6 +349,8 @@ class BwTabListTest {
                     case "getTeams" -> teams;
                     case "getPlayers" -> players;
                     case "getSpectators" -> spectators;
+                    case "isSpectator" -> spectators.stream().anyMatch(spectator ->
+                            spectator.getUniqueId().equals(((Player) args[0]).getUniqueId()));
                     case "getTeam" -> currentTeams.get(((Player) args[0]).getUniqueId());
                     case "getExTeam" -> formerTeams.get((UUID) args[0]);
                     case "getStatus" -> state;

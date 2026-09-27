@@ -71,6 +71,7 @@ public class BwTabList {
 
         handleHealthIcon();
         requestPlayerListOrderUpdate();
+        synchronizePlayerListVisibility(null, null);
         boolean fullFormatting = !this.isTabFormattingDisabled();
         if (!fullFormatting && sidebar.getArena() == null) {
             clearDeployedTabs();
@@ -97,6 +98,10 @@ public class BwTabList {
         }
 
         sidebar.getArena().getPlayers().forEach(playing -> desiredPlayers.put(playing.getUniqueId(), playing));
+        if (sidebar.getArena().isSpectator(sidebar.getPlayer())) {
+            sidebar.getArena().getSpectators()
+                    .forEach(spectator -> desiredPlayers.put(spectator.getUniqueId(), spectator));
+        }
         synchronizeTabs(desiredPlayers, fullFormatting);
     }
 
@@ -200,6 +205,7 @@ public class BwTabList {
             return;
         }
         requestPlayerListOrderUpdate();
+        synchronizePlayerListVisibility(player, spectator);
 
         // unique tab list name
         String playerTabId = player.getUniqueId().toString();
@@ -227,10 +233,15 @@ public class BwTabList {
             return;
         }
 
-        // in-game tab has a special treatment
+        // Active players must not receive spectator rows. A spectator viewer
+        // receives them so the rows can be placed after every active player.
         if (arena.isSpectator(player) || (spectator != null && spectator)) {
-            handle.clearPlayerHealth(player);
-            removeDeployedTab(player.getUniqueId());
+            if (!arena.isSpectator(sidebar.getPlayer())) {
+                handle.clearPlayerHealth(player);
+                removeDeployedTab(player.getUniqueId());
+                return;
+            }
+            giveUpdateSpectatorTabFormat(player, arena);
             return;
         }
 
@@ -291,8 +302,57 @@ public class BwTabList {
         deployTab(teamTab);
     }
 
+    private void giveUpdateSpectatorTabFormat(@NotNull Player player, @NotNull IArena arena) {
+        Sidebar handle = sidebar.getHandle();
+        ITeam team = resolvePlayerListTeam(arena, player);
+        HashMap<String, String> replacements = getTeamReplacements(team);
+        String prefixPath;
+        String suffixPath;
+        GameState status = arena.getStatus();
+        if (status == GameState.waiting) {
+            prefixPath = Messages.FORMATTING_SB_TAB_WAITING_PREFIX_SPEC;
+            suffixPath = Messages.FORMATTING_SB_TAB_WAITING_SUFFIX_SPEC;
+        } else if (status == GameState.starting) {
+            prefixPath = Messages.FORMATTING_SB_TAB_STARTING_PREFIX_SPEC;
+            suffixPath = Messages.FORMATTING_SB_TAB_STARTING_SUFFIX_SPEC;
+        } else if (status == GameState.playing) {
+            boolean eliminated = team != null;
+            prefixPath = eliminated
+                    ? Messages.FORMATTING_SB_TAB_PLAYING_ELM_PREFIX
+                    : Messages.FORMATTING_SB_TAB_PLAYING_SPEC_PREFIX;
+            suffixPath = eliminated
+                    ? Messages.FORMATTING_SB_TAB_PLAYING_ELM_SUFFIX
+                    : Messages.FORMATTING_SB_TAB_PLAYING_SPEC_SUFFIX;
+        } else if (status == GameState.restarting) {
+            boolean eliminated = team != null;
+            prefixPath = eliminated
+                    ? Messages.FORMATTING_SB_TAB_RESTARTING_ELM_PREFIX
+                    : Messages.FORMATTING_SB_TAB_RESTARTING_SPEC_PREFIX;
+            suffixPath = eliminated
+                    ? Messages.FORMATTING_SB_TAB_RESTARTING_ELM_SUFFIX
+                    : Messages.FORMATTING_SB_TAB_RESTARTING_SPEC_SUFFIX;
+        } else {
+            prefixPath = Messages.FORMATTING_SB_TAB_PLAYING_SPEC_PREFIX;
+            suffixPath = Messages.FORMATTING_SB_TAB_PLAYING_SPEC_SUFFIX;
+        }
+        ChatColor fallbackColor = team == null ? ChatColor.WHITE : getPlayerListColor(team);
+        PlayerTab tab = handle.playerTabCreate(
+                player.getUniqueId().toString(), player,
+                getPlayerRowText(prefixPath, player, replacements),
+                getPlayerRowText(suffixPath, player, replacements),
+                PlayerTab.PushingRule.NEVER,
+                sidebar.getPlaceholders(player), fallbackColor,
+                PlayerTab.NameTagVisibility.NEVER,
+                PlayerTab.PlayerListMode.SPECTATOR, null
+        );
+        deployTab(tab);
+    }
+
     /** Recreate an existing row so Sidebar sends a forced one-entry update. */
     void replayPlayerListEntry(@NotNull Player player) {
+        if (sidebar.getHandle() != null) {
+            sidebar.getHandle().replayHiddenPlayerList(sidebar.getPlayer(), player);
+        }
         if (!deployedPerPlayerTabList.containsKey(player.getUniqueId())) return;
         giveUpdateTabFormat(player, false, null);
     }
@@ -300,6 +360,9 @@ public class BwTabList {
     /** Remove one target from this viewer's deployed TAB state. */
     void removePlayerListEntry(@NotNull UUID playerId) {
         removeDeployedTab(playerId);
+        if (sidebar.getHandle() != null) {
+            sidebar.getHandle().removeHiddenPlayerListTarget(sidebar.getPlayer(), playerId);
+        }
     }
 
     private void giveUpdateTeamColor(@NotNull Player player, @Nullable Boolean spectatorOverride) {
@@ -312,7 +375,13 @@ public class BwTabList {
 
         ITeam team = resolvePlayerListTeam(arena, player);
         boolean spectator = arena.isSpectator(player) || Boolean.TRUE.equals(spectatorOverride);
-        PlayerTab.PlayerListMode playerListMode = resolveMinimalPlayerListMode(team, spectator);
+        if (spectator && !arena.isSpectator(sidebar.getPlayer())) {
+            removeDeployedTab(player.getUniqueId());
+            return;
+        }
+        PlayerTab.PlayerListMode playerListMode = spectator
+                ? PlayerTab.PlayerListMode.SPECTATOR
+                : resolveMinimalPlayerListMode(team, false);
         if (playerListMode == null) {
             removeDeployedTab(player.getUniqueId());
             return;
@@ -386,15 +455,34 @@ public class BwTabList {
     void refreshPlayerListState() {
         IArena arena = sidebar.getArena();
         if (arena == null) return;
+        synchronizePlayerListVisibility(null, null);
         for (PlayerTab tab : List.copyOf(deployedPerPlayerTabList.values())) {
             Player player = tab.getPlayer();
-            if (!player.isOnline() || arena.isSpectator(player)) {
+            if (!player.isOnline()
+                    || (arena.isSpectator(player) && !arena.isSpectator(sidebar.getPlayer()))) {
                 removeDeployedTab(player.getUniqueId());
                 continue;
             }
             tab.setColor(getPlayerListColor(resolvePlayerListTeam(arena, player)));
             tab.setItalic(arena.isReSpawning(player));
         }
+    }
+
+    private void synchronizePlayerListVisibility(@Nullable Player newlySpectator,
+                                                 @Nullable Boolean spectatorOverride) {
+        Sidebar handle = sidebar.getHandle();
+        if (handle == null) return;
+        IArena arena = sidebar.getArena();
+        if (arena == null || arena.isSpectator(sidebar.getPlayer())) {
+            handle.synchronizeHiddenPlayerList(sidebar.getPlayer(), List.of());
+            return;
+        }
+        List<Player> hidden = new ArrayList<>(arena.getSpectators());
+        if (Boolean.TRUE.equals(spectatorOverride) && newlySpectator != null
+                && newlySpectator.isOnline()) {
+            hidden.add(newlySpectator);
+        }
+        handle.synchronizeHiddenPlayerList(sidebar.getPlayer(), hidden);
     }
 
     @NotNull
@@ -503,9 +591,8 @@ public class BwTabList {
     }
 
     /**
-     * Returns the arena roster grouped from red to violet. Active and eliminated
-     * members of the same team stay together and are ordered by player name;
-     * unassigned spectators are placed last.
+     * Returns the arena roster grouped from red to violet. Active players stay
+     * in team order; every spectator is appended after all active players.
      */
     static List<Player> orderedArenaPlayers(@NotNull IArena arena) {
         List<ITeam> teams = new ArrayList<>(arena.getTeams());
@@ -527,10 +614,16 @@ public class BwTabList {
                 members.add(player);
             }
         }
+        List<Player> spectators = new ArrayList<>();
+        for (Player player : arena.getSpectators()) {
+            if (seenPlayers.add(player.getUniqueId())) spectators.add(player);
+        }
+        spectators.sort(PLAYER_NAME_ORDER);
         List<Player> ordered = new ArrayList<>(seenPlayers.size());
         appendSortedGroups(ordered, teamMembers.values());
         unassigned.sort(PLAYER_NAME_ORDER);
         ordered.addAll(unassigned);
+        ordered.addAll(spectators);
         return ordered;
     }
 
@@ -591,13 +684,20 @@ public class BwTabList {
         arenas.sort(Comparator.comparing(IArena::getArenaName, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(IArena::getArenaName));
 
-        LinkedHashMap<UUID, Player> players = new LinkedHashMap<>();
+        LinkedHashMap<UUID, Player> activePlayers = new LinkedHashMap<>();
+        LinkedHashMap<UUID, Player> spectatorPlayers = new LinkedHashMap<>();
         for (IArena arena : arenas) {
             for (Player player : orderedArenaPlayers(arena)) {
-                if (player.isOnline()) players.putIfAbsent(player.getUniqueId(), player);
+                if (!player.isOnline()) continue;
+                LinkedHashMap<UUID, Player> destination = arena.isSpectator(player)
+                        ? spectatorPlayers : activePlayers;
+                destination.putIfAbsent(player.getUniqueId(), player);
             }
         }
-        return new ArrayList<>(players.values());
+        List<Player> ordered = new ArrayList<>(activePlayers.size() + spectatorPlayers.size());
+        ordered.addAll(activePlayers.values());
+        ordered.addAll(spectatorPlayers.values());
+        return ordered;
     }
 
     static void applyPlayerListOrder(@NotNull Collection<Player> orderedPlayers) {

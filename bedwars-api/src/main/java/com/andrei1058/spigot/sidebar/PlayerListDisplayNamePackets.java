@@ -37,6 +37,7 @@ final class PlayerListDisplayNamePackets implements PlayerListDisplayNameRendere
     private final EnumSet<?> displayNameAction;
     private final EnumSet<?> gameModeAction;
     private final EnumSet<?> restoreActions;
+    private final EnumSet<?> listedAction;
     private final Object spectatorGameType;
     private boolean packetFailureLogged;
 
@@ -73,6 +74,7 @@ final class PlayerListDisplayNamePackets implements PlayerListDisplayNameRendere
         displayNameAction = actions(playerInfoAction, "UPDATE_DISPLAY_NAME");
         gameModeAction = actions(playerInfoAction, "UPDATE_GAME_MODE");
         restoreActions = actions(playerInfoAction, "UPDATE_DISPLAY_NAME", "UPDATE_GAME_MODE");
+        listedAction = actions(playerInfoAction, "UPDATE_LISTED");
         spectatorGameType = enumConstant(gameType, "SPECTATOR");
         verifyPacketConstruction();
     }
@@ -141,6 +143,40 @@ final class PlayerListDisplayNamePackets implements PlayerListDisplayNameRendere
     @Override
     public boolean restore(@NotNull Player viewer, @NotNull Collection<Player> targets) {
         return sendSnapshot(viewer, targets, restoreActions);
+    }
+
+    @Override
+    public boolean hidePlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+        return setListed(viewer, targets, false);
+    }
+
+    @Override
+    public boolean showPlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+        // Restore only server-listed, visible players. UPDATE_LISTED never
+        // recreates a removed profile or exposes an offline/vanished player.
+        return setListed(viewer, targets.stream().filter(Player::isOnline)
+                .filter(viewer::canSee).filter(viewer::isListed).toList(), true);
+    }
+
+    private boolean setListed(Player viewer, Collection<Player> targets, boolean listed) {
+        if (targets.isEmpty()) return true;
+        try {
+            send(viewer, createListedPacket(targets, listed));
+            return true;
+        } catch (ReflectiveOperationException exception) {
+            logPacketFailure(viewer, exception);
+            return false;
+        }
+    }
+
+    private Object createListedPacket(Collection<Player> targets, boolean listed)
+            throws ReflectiveOperationException {
+        List<Object> entries = new ArrayList<>(targets.size());
+        for (Player target : targets) {
+            entries.add(entryConstructor.newInstance(target.getUniqueId(), null, listed,
+                    0, null, null, false, 0, null));
+        }
+        return entriesPacket.newInstance(listedAction, entries);
     }
 
     private boolean sendSnapshot(@NotNull Player viewer, @NotNull Collection<Player> targets,
@@ -250,6 +286,16 @@ final class PlayerListDisplayNamePackets implements PlayerListDisplayNameRendere
             return delegate().restore(viewer, targets);
         }
 
+        @Override
+        public boolean hidePlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+            return delegate().hidePlayerList(viewer, targets);
+        }
+
+        @Override
+        public boolean showPlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+            return delegate().showPlayerList(viewer, targets);
+        }
+
         private PlayerListDisplayNameRenderer delegate() {
             PlayerListDisplayNameRenderer current = delegate;
             if (current != null) return current;
@@ -292,6 +338,16 @@ final class PlayerListDisplayNamePackets implements PlayerListDisplayNameRendere
 
         @Override
         public boolean restore(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+            return false;
+        }
+
+        @Override
+        public boolean hidePlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
+            return false;
+        }
+
+        @Override
+        public boolean showPlayerList(@NotNull Player viewer, @NotNull Collection<Player> targets) {
             return false;
         }
     }
