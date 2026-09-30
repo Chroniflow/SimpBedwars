@@ -122,6 +122,60 @@ class OreGeneratorProductionTest {
     }
 
     @Test
+    void islandGeneratorPausesWhenNoTeamMemberIsOnTheIsland() {
+        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(true);
+        when(arena.getIslandRadius()).thenReturn(17);
+        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
+        Player player = mock(Player.class);
+        when(player.getLocation()).thenReturn(new Location(world, 80, 65, 80));
+        members.add(player);
+        CountingGenerator generator = generator(GeneratorType.IRON, team);
+
+        generator.spawn();
+        generator.spawn();
+
+        assertEquals(0, generator.drops);
+        assertEquals(1, generator.getNextSpawn());
+    }
+
+    @Test
+    void islandGeneratorResumesWhenAMemberReturns() {
+        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(true);
+        when(arena.getIslandRadius()).thenReturn(17);
+        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
+        Player player = mock(Player.class);
+        when(player.getLocation()).thenReturn(new Location(world, 0, 65, 0));
+        members.add(player);
+        CountingGenerator generator = generator(GeneratorType.GOLD, team);
+
+        generator.spawn();
+        assertEquals(1, generator.drops);
+
+        when(player.getLocation()).thenReturn(new Location(world, 90, 65, 90));
+        generator.spawn();
+        assertEquals(1, generator.drops);
+
+        when(player.getLocation()).thenReturn(new Location(world, 3, 65, 3));
+        generator.spawn();
+        assertEquals(2, generator.drops);
+    }
+
+    @Test
+    void travellingAwayKeepsProducingWhenTheOnIslandRuleIsDisabled() {
+        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(false);
+        when(arena.getIslandRadius()).thenReturn(17);
+        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
+        Player player = mock(Player.class);
+        when(player.getLocation()).thenReturn(new Location(world, 80, 65, 80));
+        members.add(player);
+        CountingGenerator generator = generator(GeneratorType.IRON, team);
+
+        generator.spawn();
+
+        assertEquals(1, generator.drops);
+    }
+
+    @Test
     void existingFalseSettingKeepsEmptyIslandProductionEnabled() {
         when(arenaConfig.getBoolean(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS)).thenReturn(false);
         when(team.isBedDestroyed()).thenReturn(true);

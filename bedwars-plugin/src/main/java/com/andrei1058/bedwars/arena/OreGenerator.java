@@ -30,6 +30,7 @@ import com.andrei1058.bedwars.api.arena.generator.GeneratorType;
 import com.andrei1058.bedwars.api.arena.generator.IGenHolo;
 import com.andrei1058.bedwars.api.arena.generator.IGenerator;
 import com.andrei1058.bedwars.api.arena.team.ITeam;
+import com.andrei1058.bedwars.api.configuration.ConfigManager;
 import com.andrei1058.bedwars.api.configuration.ConfigPath;
 import com.andrei1058.bedwars.api.events.gameplay.GeneratorUpgradeEvent;
 import com.andrei1058.bedwars.api.language.Language;
@@ -65,6 +66,7 @@ public class OreGenerator implements IGenerator {
     private ITeam bwt;
     private final boolean splitEnabled;
     private final boolean stopForEmptyTeam;
+    private final boolean stopWithoutTeamOnIsland;
     boolean up = true;
 
     /**
@@ -88,6 +90,7 @@ public class OreGenerator implements IGenerator {
         this.type = type;
         this.splitEnabled = plugin.getConfig().getBoolean(ConfigPath.GENERAL_CONFIGURATION_ENABLE_GEN_SPLIT);
         this.stopForEmptyTeam = arena.getConfig().getBoolean(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS);
+        this.stopWithoutTeamOnIsland = arena.getConfig().getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND);
         loadDefaults();
 
         Cuboid c = new Cuboid(location, getArena().getConfig().getInt(ConfigPath.ARENA_GENERATOR_PROTECTION), true);
@@ -160,6 +163,12 @@ public class OreGenerator implements IGenerator {
         // travel and respawn waits never stop production, and a restored team
         // can resume without losing its generators or upgrade state.
         if (stopForEmptyTeam && bwt != null && bwt.isBedDestroyed() && bwt.getMembers().isEmpty()) {
+            return;
+        }
+        // Keep island production active only while a team member is physically
+        // on the island. This preserves the upgraded generator and its timer,
+        // so returning players resume production without a rebuild.
+        if (stopWithoutTeamOnIsland && bwt != null && !hasTeamMemberOnIsland()) {
             return;
         }
 
@@ -494,6 +503,24 @@ public class OreGenerator implements IGenerator {
 
     static boolean isSpawnDue(int secondsRemaining) {
         return secondsRemaining <= 1;
+    }
+
+    /**
+     * Whether any team member is currently standing on the team island.
+     * Respawning or temporarily disconnected members are not counted, so an
+     * island with nobody home pauses production until a member returns. The
+     * generator and its timer are kept intact and resume without a rebuild.
+     */
+    private boolean hasTeamMemberOnIsland() {
+        Location center = bwt.getBed() != null ? bwt.getBed() : bwt.getSpawn();
+        if (center == null) return true;
+        for (Player player : bwt.getMembers()) {
+            if (player == null || arena.isReSpawning(player)) continue;
+            if (ConfigManager.isSameWorldWithin(player.getLocation(), center, arena.getIslandRadius())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
