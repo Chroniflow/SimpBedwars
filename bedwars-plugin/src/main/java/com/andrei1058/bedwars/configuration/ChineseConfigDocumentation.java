@@ -168,7 +168,6 @@ public final class ChineseConfigDocumentation {
         comment(config, ConfigPath.ARENA_Y_LEVEL_KILL, "低于此 Y 坐标时判定为掉入虚空。");
         comment(config, ConfigPath.ARENA_CONFIGURATION_MAX_BUILD_Y, "玩家允许放置方块的最大 Y 坐标。");
         comment(config, ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS, "队伍无成员且床已被摧毁时停止岛屿资源生成；包括开局未分配玩家的空队伍。", "队员暂时离岛或等待重生不会停产；新配置默认开启，已有值保持不变。");
-        comment(config, ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND, "队伍没有存活成员身处岛屿半径内时，停止该队伍的铁、金和岛屿绿宝石生成；中央钻石与绿宝石不受影响。", "成员回到岛屿后自动恢复；默认开启，设为 false 可保持原有“玩家外出仍持续刷新”的行为。");
         comment(config, ConfigPath.ARENA_DISABLE_NPCS_FOR_EMPTY_TEAMS, "空队伍是否不生成商店和升级 NPC。");
         comment(config, ConfigPath.ARENA_NORMAL_DEATH_DROPS, "是否使用原版死亡掉落；关闭时由插件管理资源掉落。");
         comment(config, ConfigPath.ARENA_USE_BED_HOLO, "是否在床上方显示床状态全息文字。");
@@ -204,15 +203,15 @@ public final class ChineseConfigDocumentation {
     }
 
     public static void generators(ConfigManager config) {
-        comment(config, "Default", "默认分组的生成器参数；可以复制本节并将 Default 改为竞技场分组名。", "delay/start 单位为秒，amount 是每次生成数量；spawn-limit 仅保留旧配置兼容，不再限制资源生成。");
+        comment(config, "Default", "默认分组的生成器参数；可以复制本节并将 Default 改为竞技场分组名。", "delay/start 单位为秒，amount 是每次生成数量，spawn-limit 按生成点附近同类地面积压总数计算。");
         comment(config, ConfigPath.GENERATOR_STACK_ITEMS, "是否在生成时直接合并同类资源，可减少物品实体数量。");
         String root = "Default.";
         comment(config, root + ConfigPath.GENERATOR_IRON_DELAY, "铁资源生成间隔，单位为秒；2.10.7 默认值为 1 秒。");
         comment(config, root + ConfigPath.GENERATOR_IRON_AMOUNT, "每次生成的铁数量。");
-        comment(config, root + ConfigPath.GENERATOR_IRON_SPAWN_LIMIT, "历史兼容值；铁资源不再因地面积压而停止生成。");
+        comment(config, root + ConfigPath.GENERATOR_IRON_SPAWN_LIMIT, "生成点附近铁物品达到该总数后暂停生成，拾取后自动恢复；设为 0 表示不限制。");
         comment(config, root + ConfigPath.GENERATOR_GOLD_DELAY, "金资源生成间隔，单位为秒；2.10.7 默认值为 4 秒。");
         comment(config, root + ConfigPath.GENERATOR_GOLD_AMOUNT, "每次生成的金数量。");
-        comment(config, root + ConfigPath.GENERATOR_GOLD_SPAWN_LIMIT, "历史兼容值；金资源不再因地面积压而停止生成。");
+        comment(config, root + ConfigPath.GENERATOR_GOLD_SPAWN_LIMIT, "生成点附近金物品达到该总数后暂停生成，拾取后自动恢复；设为 0 表示不限制。");
         commentTier(config, root, "diamond", "钻石");
         commentTier(config, root, "emerald", "绿宝石");
     }
@@ -222,7 +221,7 @@ public final class ChineseConfigDocumentation {
             String path = root + resource + "." + tier + '.';
             comment(config, path + "delay", label + " " + tier + " 生成间隔，单位为秒。");
             comment(config, path + "amount", label + " " + tier + " 每次生成数量。");
-            comment(config, path + "spawn-limit", "历史兼容值；" + label + " " + tier + " 不再因地面积压而停止生成。");
+            comment(config, path + "spawn-limit", label + " " + tier + " 生成点附近地面积压达到该总数后暂停生成，拾取后恢复；0 表示不限制。");
             if (!tier.equals("tierI")) comment(config, path + "start", "本等级在开局后多少秒启用。");
         }
     }

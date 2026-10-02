@@ -7,7 +7,7 @@
     <groupId>com.simpmc.bedwars</groupId>
     <artifactId>SimpMC-BedWars</artifactId>
     <packaging>pom</packaging>
-    <version>5.10.0</version>
+    <version>5.9.1</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

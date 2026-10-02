@@ -109,66 +109,12 @@ class OreGeneratorProductionTest {
         generator.spawn();
 
         assertEquals(2, generator.drops);
-        verifyNoInteractions(player, world);
+        verifyNoInteractions(player);
     }
 
     @Test
     void temporarilyDisconnectedTeamWithABedKeepsProducing() {
         CountingGenerator generator = generator(GeneratorType.GOLD, team);
-
-        generator.spawn();
-
-        assertEquals(1, generator.drops);
-    }
-
-    @Test
-    void islandGeneratorPausesWhenNoTeamMemberIsOnTheIsland() {
-        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(true);
-        when(arena.getIslandRadius()).thenReturn(17);
-        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
-        Player player = mock(Player.class);
-        when(player.getLocation()).thenReturn(new Location(world, 80, 65, 80));
-        members.add(player);
-        CountingGenerator generator = generator(GeneratorType.IRON, team);
-
-        generator.spawn();
-        generator.spawn();
-
-        assertEquals(0, generator.drops);
-        assertEquals(1, generator.getNextSpawn());
-    }
-
-    @Test
-    void islandGeneratorResumesWhenAMemberReturns() {
-        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(true);
-        when(arena.getIslandRadius()).thenReturn(17);
-        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
-        Player player = mock(Player.class);
-        when(player.getLocation()).thenReturn(new Location(world, 0, 65, 0));
-        members.add(player);
-        CountingGenerator generator = generator(GeneratorType.GOLD, team);
-
-        generator.spawn();
-        assertEquals(1, generator.drops);
-
-        when(player.getLocation()).thenReturn(new Location(world, 90, 65, 90));
-        generator.spawn();
-        assertEquals(1, generator.drops);
-
-        when(player.getLocation()).thenReturn(new Location(world, 3, 65, 3));
-        generator.spawn();
-        assertEquals(2, generator.drops);
-    }
-
-    @Test
-    void travellingAwayKeepsProducingWhenTheOnIslandRuleIsDisabled() {
-        when(arenaConfig.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND)).thenReturn(false);
-        when(arena.getIslandRadius()).thenReturn(17);
-        when(team.getBed()).thenReturn(new Location(world, 0, 65, 0));
-        Player player = mock(Player.class);
-        when(player.getLocation()).thenReturn(new Location(world, 80, 65, 80));
-        members.add(player);
-        CountingGenerator generator = generator(GeneratorType.IRON, team);
 
         generator.spawn();
 
@@ -188,7 +134,7 @@ class OreGeneratorProductionTest {
 
     @ParameterizedTest
     @EnumSource(value = GeneratorType.class, names = {"IRON", "GOLD", "DIAMOND", "EMERALD"})
-    void resourceBacklogAndLegacyLimitsNeverStopProduction(GeneratorType type) {
+    void spawnLimitStopsProductionUntilTheGroundItemsAreCollected(GeneratorType type) {
         CountingGenerator generator = generator(type, null);
         Item backlog = mock(Item.class);
         ItemStack stack = mock(ItemStack.class);
@@ -203,10 +149,22 @@ class OreGeneratorProductionTest {
         generator.spawn();
         generator.spawn();
 
-        assertEquals(2, generator.drops);
-        assertEquals(1, generator.getSpawnLimit(), "旧 API 仍能读回保存的值，但不会限制生成");
-        verify(world, never()).getNearbyEntitiesByType(eq(Item.class), any(Location.class),
+        assertEquals(0, generator.drops);
+        assertEquals(1, generator.getSpawnLimit());
+        verify(world, atLeastOnce()).getNearbyEntitiesByType(eq(Item.class), any(Location.class),
                 anyDouble(), anyDouble(), anyDouble(), any());
+    }
+
+    @Test
+    void productionResumesWhenTheGroundItemsStayBelowTheLimit() {
+        CountingGenerator generator = generator(GeneratorType.IRON, null);
+        when(world.getNearbyEntitiesByType(eq(Item.class), any(Location.class),
+                anyDouble(), anyDouble(), anyDouble(), any())).thenReturn(List.of());
+
+        generator.setSpawnLimit(4);
+        generator.spawn();
+
+        assertEquals(1, generator.drops);
     }
 
     @Test

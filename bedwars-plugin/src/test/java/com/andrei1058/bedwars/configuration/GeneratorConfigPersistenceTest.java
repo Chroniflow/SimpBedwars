@@ -34,12 +34,11 @@ class GeneratorConfigPersistenceTest {
 
         YamlConfiguration saved = YamlConfiguration.loadConfiguration(file.toFile());
         assertEquals(enabled, saved.getBoolean(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS));
-        assertEquals(24, saved.getInt("config-version"));
+        assertEquals(23, saved.getInt("config-version"));
         assertEquals("retained", saved.getString("custom-option"));
         assertTrue(saved.getComments(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS).getFirst().contains("无成员"));
         String text = Files.readString(file);
-        assertTrue(text.indexOf("disable-generator-for-empty-teams:") < text.indexOf("stop-generator-when-no-team-on-island:"));
-        assertTrue(text.indexOf("stop-generator-when-no-team-on-island:") < text.indexOf("disable-npcs-for-empty-teams:"));
+        assertTrue(text.indexOf("disable-generator-for-empty-teams:") < text.indexOf("disable-npcs-for-empty-teams:"));
     }
 
     @Test
@@ -51,32 +50,6 @@ class GeneratorConfigPersistenceTest {
         assertTrue(config.getBoolean(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS));
         config.reload();
         assertTrue(config.getBoolean(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS));
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void preservesOnIslandGeneratorSettingDuringUpgradeAndRestart(boolean enabled) throws Exception {
-        Path file = directory.resolve("arena.yml");
-        Files.writeString(file, "config-version: 23\n"
-                + ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND + ": " + enabled + "\n");
-
-        Plugin plugin = plugin();
-        ArenaConfig config = new ArenaConfig(plugin, "arena", directory.toString());
-        config.save();
-        new ArenaConfig(plugin, "arena", directory.toString()).save();
-
-        YamlConfiguration saved = YamlConfiguration.loadConfiguration(file.toFile());
-        assertEquals(24, saved.getInt("config-version"));
-        assertEquals(enabled, saved.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND));
-    }
-
-    @Test
-    void missingOnIslandGeneratorSettingDefaultsToEnabled() throws Exception {
-        Files.writeString(directory.resolve("arena.yml"), "config-version: 23\n");
-
-        ArenaConfig config = new ArenaConfig(plugin(), "arena", directory.toString());
-
-        assertTrue(config.getBoolean(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND));
     }
 
     @Test
@@ -110,7 +83,7 @@ class GeneratorConfigPersistenceTest {
         assertEquals(123, saved.getInt("Default.iron.spawn-limit"));
         assertEquals(8, saved.getInt("Solo.diamond.tierI.delay"));
         assertEquals(55, saved.getInt("Solo.diamond.tierI.spawn-limit"));
-        assertTrue(saved.getComments("Default.iron.spawn-limit").getFirst().contains("历史兼容"));
+        assertTrue(saved.getComments("Default.iron.spawn-limit").getFirst().contains("拾取"));
     }
 
     private Plugin plugin() {

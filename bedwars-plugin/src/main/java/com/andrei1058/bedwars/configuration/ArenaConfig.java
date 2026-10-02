@@ -39,7 +39,7 @@ import java.util.List;
 
 public class ArenaConfig extends ConfigManager {
 
-    private static final int CONFIG_VERSION = 24;
+    private static final int CONFIG_VERSION = 23;
     static final int DEFAULT_VOID_KILL_HEIGHT = -70;
 
     @SuppressWarnings({"SpellCheckingInspection"})
@@ -65,7 +65,6 @@ public class ArenaConfig extends ConfigManager {
         //yml.addDefault("disableGeneratorsOnOrphanIslands", false);
         yml.addDefault(ConfigPath.ARENA_CONFIGURATION_MAX_BUILD_Y, 180);
         yml.addDefault(ConfigPath.ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS, true);
-        yml.addDefault(ConfigPath.ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND, true);
         yml.addDefault(ConfigPath.ARENA_DISABLE_NPCS_FOR_EMPTY_TEAMS, true);
         yml.addDefault(ConfigPath.ARENA_NORMAL_DEATH_DROPS, false);
         yml.addDefault(ConfigPath.ARENA_USE_BED_HOLO, true);

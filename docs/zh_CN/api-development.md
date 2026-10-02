@@ -8,7 +8,7 @@ Maven：
 <dependency>
     <groupId>com.simpmc.bedwars</groupId>
     <artifactId>simpmc-bedwars-api</artifactId>
-    <version>5.10.0</version>
+    <version>5.9.1</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -31,9 +31,7 @@ if (api == null) {
 
 不要强制转换为插件内部的 `com.andrei1058.bedwars.API`。
 
-5.8.0 起，生成器不再因为地面资源积压停止生成。`IGenerator#setSpawnLimit(int)` 与 `getSpawnLimit()` 保留兼容签名和读写值，但不再影响实际产出；旧团队升级中的上限参数仍能加载。生成间隔和单次数量继续使用 `setDelay`、`setAmount` 控制。
-
-5.10.0 起，竞技场配置 `stop-generator-when-no-team-on-island` 默认开启，队伍无存活成员身处岛屿半径内时暂停该队岛屿生成器，成员回岛后自动恢复。该暂停不销毁生成器或重设升级，附属插件读取到的生成器对象和进度保持有效；设为 `false` 可恢复持续生成。
+`IGenerator#setSpawnLimit(int)` 与 `getSpawnLimit()` 控制生成点附近同类地面资源的总数上限：达到时该生成器暂停产出，拾取后自动恢复，`0` 表示不限制。生成间隔和单次数量继续使用 `setDelay`、`setAmount` 控制。该行为与 BW1058 原仓库一致。
 
 ## 对局历史 API
 

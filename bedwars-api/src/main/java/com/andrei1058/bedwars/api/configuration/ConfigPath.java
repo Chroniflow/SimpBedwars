@@ -229,7 +229,6 @@ public class ConfigPath {
     public static final String ARENA_UPGRADES_PROTECTION = "upgrades-protection";
     public static final String ARENA_GENERATOR_PROTECTION = "generator-protection";
     public static final String ARENA_DISABLE_GENERATOR_FOR_EMPTY_TEAMS = "disable-generator-for-empty-teams";
-    public static final String ARENA_STOP_GENERATOR_WITHOUT_TEAM_ON_ISLAND = "stop-generator-when-no-team-on-island";
     public static final String ARENA_DISABLE_NPCS_FOR_EMPTY_TEAMS = "disable-npcs-for-empty-teams";
     public static final String ARENA_ISLAND_RADIUS = "island-radius";
     public static final String ARENA_WAITING_FACING = "waiting.Facing";

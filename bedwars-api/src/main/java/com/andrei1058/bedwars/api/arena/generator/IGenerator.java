@@ -111,8 +111,8 @@ public interface IGenerator {
     void enableRotation();
 
     /**
-     * 保存旧生成上限值，供现有附属插件兼容读取。
-     * 自 5.8.0 起，SimpMC-BedWars 不再根据此值或未拾取物品数量停止生成。
+     * 设置生成上限。生成点附近同类地下物品总数达到该值后暂停生成，
+     * 拾取后自动恢复；设为 0 表示不限制。
      */
     void setSpawnLimit(int value);
 
@@ -151,7 +151,7 @@ public interface IGenerator {
     int getNextSpawn();
 
     /**
-     * 读取旧生成上限兼容值；自 5.8.0 起，此值不再限制实际资源生成。
+     * 读取生成上限。生成点附近同类地下物品达到该总数时该生成器暂停产出。
      */
     int getSpawnLimit();
 
